@@ -1,371 +1,117 @@
 #!/bin/bash
+# WireGuard Manager Installer — переписанный с нуля
 
-# Цвета для вывода
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-BOLD='\033[1m'
+# ===== Цвета =====
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'; BOLD='\033[1m'
 
-# Файлы для загрузки
-WG_MANAGER_SH="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.sh"
-WG_MANAGER_PY="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.py"
-WG_MANAGER="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager"
+# ===== Константы =====
 INSTALL_DIR="/opt/wg-manager"
 BIN_LINK="/usr/local/bin/wg-manager"
+REPO_BASE="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main"
+FILES=("wg-manager.sh" "wg-manager.py" "wg-manager")
+TMP_DIR=$(mktemp -d)
 
-# Проверка на root права
-check_root() {
+# ===== Проверка root =====
+require_root() {
     if [ "$EUID" -ne 0 ]; then
-        echo -e "${RED}Этот скрипт должен быть запущен с правами суперпользователя (root).${NC}"
-        echo -e "Выполните: ${BOLD}sudo bash $0${NC}"
+        echo -e "${RED}Скрипт нужно запускать с правами root.${NC}"
+        echo -e "Используйте: ${BOLD}sudo bash $0${NC}"
         exit 1
     fi
 }
 
-# Проверка зависимостей
+# ===== Проверка и установка зависимости =====
+require_dep() {
+    local pkg="$1"
+    if ! command -v "$pkg" &>/dev/null; then
+        echo -e "${YELLOW}Не найдено: $pkg. Устанавливаю...${NC}"
+        apt-get update && apt-get install -y "$pkg" || {
+            echo -e "${RED}Не удалось установить $pkg.${NC}"; exit 1;
+        }
+    fi
+}
+
 check_dependencies() {
     echo -e "${BLUE}Проверка зависимостей...${NC}"
-    
-    # Проверка наличия git
-    if ! command -v git &> /dev/null; then
-        echo -e "${YELLOW}Git не найден. Устанавливаем...${NC}"
-        apt-get update && apt-get install -y git || {
-            echo -e "${RED}Не удалось установить git. Проверьте соединение и права доступа.${NC}"
-            exit 1
-        }
-    fi
-    
-    # Проверка наличия python3
-    if ! command -v python3 &> /dev/null; then
-        echo -e "${YELLOW}Python3 не найден. Устанавливаем...${NC}"
-        apt-get update && apt-get install -y python3 || {
-            echo -e "${RED}Не удалось установить Python3. Проверьте соединение и права доступа.${NC}"
-            exit 1
-        }
-    fi
-    
-    # Проверка наличия wireguard
-    if ! command -v wg &> /dev/null; then
-        echo -e "${YELLOW}WireGuard не найден. Устанавливаем...${NC}"
-        apt-get update && apt-get install -y wireguard || {
-            echo -e "${RED}Не удалось установить WireGuard. Проверьте соединение и права доступа.${NC}"
-            exit 1
-        }
-    fi
-    
+    require_dep git
+    require_dep python3
+    require_dep wg
+    require_dep wget
     echo -e "${GREEN}Все зависимости установлены.${NC}"
 }
 
-# Скачивание WireGuard Manager
-download_wg_manager() {
-    echo -e "${BLUE}Скачивание WireGuard Manager...${NC}"
-    
-    # Создаем временную директорию
-    TMP_DIR=$(mktemp -d)
-    
-    echo -e "Загрузка файлов..."
-    
-    # Проверяем наличие wget или curl
-    if command -v wget &> /dev/null; then
-        DOWNLOAD_CMD="wget -q -O"
-    elif command -v curl &> /dev/null; then
-        DOWNLOAD_CMD="curl -s -o"
-    else
-        echo -e "${RED}Не найдено инструментов для скачивания (wget или curl)!${NC}"
-        echo -e "${YELLOW}Пытаюсь установить wget...${NC}"
-        apt-get update && apt-get install -y wget || {
-            echo -e "${RED}Не удалось установить wget. Проверьте соединение и права доступа.${NC}"
-            rm -rf "$TMP_DIR"
-            exit 1
+# ===== Скачивание файлов =====
+download_files() {
+    echo -e "${BLUE}Скачивание файлов...${NC}"
+    for file in "${FILES[@]}"; do
+        wget -q -O "$TMP_DIR/$file" "$REPO_BASE/$file" || {
+            echo -e "${RED}Ошибка скачивания: $file${NC}"; rm -rf "$TMP_DIR"; exit 1;
         }
-        DOWNLOAD_CMD="wget -q -O"
-    fi
-    
-    # Скачиваем файлы напрямую
-    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.sh" "$WG_MANAGER_SH" || {
-        echo -e "${RED}Не удалось скачать wg-manager.sh. Проверьте соединение и URL.${NC}"
-        rm -rf "$TMP_DIR"
-        exit 1
-    }
-    
-    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.py" "$WG_MANAGER_PY" || {
-        echo -e "${RED}Не удалось скачать wg-manager.py. Проверьте соединение и URL.${NC}"
-        rm -rf "$TMP_DIR"
-        exit 1
-    }
-
-    $DOWNLOAD_CMD "$TMP_DIR/wg-manager" "$WG_MANAGER" || {
-        echo -e "${RED}Не удалось скачать wg-manager. Проверьте соединение и URL.${NC}"
-        rm -rf "$TMP_DIR"
-        exit 1
-    }
-    
-    echo -e "${GREEN}Файлы WireGuard Manager успешно скачаны.${NC}"
-    return 0
+    done
+    echo -e "${GREEN}Скачивание завершено.${NC}"
 }
 
-# Установка WireGuard Manager
-install_wg_manager() {
-    echo -e "${BLUE}Установка WireGuard Manager...${NC}"
-    
-    # Создаем директорию для установки
-    mkdir -p "$INSTALL_DIR"
-    
-    # Копируем файлы из временной директории
-    if [ -d "$TMP_DIR" ]; then
-        if [ -f "$TMP_DIR/wg-manager.py" ]; then
-            cp "$TMP_DIR/wg-manager.py" "$INSTALL_DIR/"
-            echo -e "${GREEN}✓${NC} Установлен скрипт wg-manager.py"
-        else
-            echo -e "${RED}✗${NC} Файл wg-manager.py не найден!"
-            exit 1
-        fi
-        
-        if [ -f "$TMP_DIR/wg-manager.sh" ]; then
-            cp "$TMP_DIR/wg-manager.sh" "$INSTALL_DIR/"
-            echo -e "${GREEN}✓${NC} Установлен скрипт wg-manager.sh"
-        fi
-        
-        if [ -f "$TMP_DIR/wg-manager" ]; then
-            cp "$TMP_DIR/wg-manager" "$INSTALL_DIR/"
-            echo -e "${GREEN}✓${NC} Установлен скрипт wg-manager"
-        fi
-    else
-        echo -e "${RED}Ошибка: Временная директория не найдена${NC}"
-        exit 1
-    fi
-    
-    # Делаем скрипты исполняемыми
-    chmod +x "$INSTALL_DIR/wg-manager.py"
-    chmod +x "$INSTALL_DIR/wg-manager.sh"
-    if [ -f "$INSTALL_DIR/wg-manager" ]; then
-        chmod +x "$INSTALL_DIR/wg-manager"
-    fi
-    
-    # Создаем символическую ссылку
-    if [ -f "$INSTALL_DIR/wg-manager" ]; then
-        ln -sf "$INSTALL_DIR/wg-manager" "$BIN_LINK"
-    else
-        ln -sf "$INSTALL_DIR/wg-manager.sh" "$BIN_LINK"
-    fi
-    
-    # Создаем директорию для ключей, если её нет
+# ===== Установка =====
+install_manager() {
     mkdir -p "$INSTALL_DIR/keys"
-    
-    echo -e "${GREEN}WireGuard Manager успешно установлен.${NC}"
-    echo -e "Запустите его командой: ${BOLD}wg-manager${NC}"
-    
-    # Удаляем временную директорию, если она существует
-    if [ -d "$TMP_DIR" ]; then
-        rm -rf "$TMP_DIR"
-    fi
+    cp "$TMP_DIR"/* "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR"/*
+    ln -sf "$INSTALL_DIR/wg-manager" "$BIN_LINK"
+    echo -e "${GREEN}WireGuard Manager установлен.${NC}"
 }
 
-# Удаление WireGuard Manager
-uninstall_wg_manager() {
-    echo -e "${BLUE}Удаление WireGuard Manager...${NC}"
-    
-    # Удаляем символическую ссылку
-    if [ -L "$BIN_LINK" ]; then
-        rm "$BIN_LINK"
-        echo -e "${GREEN}Символическая ссылка удалена.${NC}"
-    else
-        echo -e "${YELLOW}Символическая ссылка не найдена.${NC}"
+# ===== Обновление =====
+update_manager() {
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo -e "${RED}WireGuard Manager не установлен.${NC}"
+        exit 1
     fi
-    
-    # Предлагаем сохранить конфигурационные файлы
+    download_files
+    cp "$TMP_DIR"/* "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR"/*
+    echo -e "${GREEN}Обновление завершено.${NC}"
+}
+
+# ===== Удаление =====
+uninstall_manager() {
+    rm -f "$BIN_LINK"
     if [ -d "$INSTALL_DIR" ]; then
-        read -p "Удалить все конфигурационные файлы и ключи? (y/n): " choice
-        if [[ "$choice" =~ ^[Yy]$ ]]; then
-            rm -rf "$INSTALL_DIR"
-            echo -e "${GREEN}Директория установки и все файлы удалены.${NC}"
-        else
-            # Удаляем только программные файлы, оставляем конфиги и ключи
-            rm -f "$INSTALL_DIR/wg-manager.py" "$INSTALL_DIR/wg-manager.sh"
-            echo -e "${GREEN}Программные файлы удалены. Конфигурации и ключи сохранены в $INSTALL_DIR${NC}"
-        fi
-    else
-        echo -e "${YELLOW}Директория установки не найдена.${NC}"
+        read -p "Удалить все файлы, включая ключи? (y/n): " ans
+        [[ "$ans" =~ ^[Yy]$ ]] && rm -rf "$INSTALL_DIR" || rm -f "$INSTALL_DIR"/wg-manager{,.sh,.py}
     fi
-    
-    echo -e "${GREEN}WireGuard Manager успешно удален из системы.${NC}"
+    echo -e "${GREEN}Удаление завершено.${NC}"
 }
 
-# Обновление WireGuard Manager
-update_wg_manager() {
-    echo -e "${BLUE}Обновление WireGuard Manager...${NC}"
-    
-    # Создаем временную директорию
-    TMP_DIR=$(mktemp -d)
-    
-    # Проверяем наличие wget или curl
-    if command -v wget &> /dev/null; then
-        DOWNLOAD_CMD="wget -q -O"
-    elif command -v curl &> /dev/null; then
-        DOWNLOAD_CMD="curl -s -o"
-    else
-        echo -e "${RED}Не найдено инструментов для скачивания (wget или curl)!${NC}"
-        echo -e "${YELLOW}Пытаюсь установить wget...${NC}"
-        apt-get update && apt-get install -y wget || {
-            echo -e "${RED}Не удалось установить wget. Проверьте соединение и права доступа.${NC}"
-            rm -rf "$TMP_DIR"
-            exit 1
-        }
-        DOWNLOAD_CMD="wget -q -O"
-    fi
-    
-    # Скачиваем файлы напрямую
-    echo -e "Скачивание последних версий файлов..."
-    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.sh" "$WG_MANAGER_SH" && \
-    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.py" "$WG_MANAGER_PY" && \
-    $DOWNLOAD_CMD "$TMP_DIR/wg-manager" "$WG_MANAGER" || {
-        echo -e "${RED}Ошибка при скачивании файлов. Проверьте соединение.${NC}"
-        rm -rf "$TMP_DIR"
-        exit 1
-    }
-    
-    # Проверяем, что скачанные файлы существуют
-    if [ -f "$TMP_DIR/wg-manager.py" ] && [ -f "$TMP_DIR/wg-manager.sh" ]; then
-        # Копируем новые версии файлов
-        cp "$TMP_DIR/wg-manager.py" "$INSTALL_DIR/"
-        cp "$TMP_DIR/wg-manager.sh" "$INSTALL_DIR/"
-        cp "$TMP_DIR/wg-manager" "$INSTALL_DIR/"
-        
-        # Делаем скрипты исполняемыми
-        chmod +x "$INSTALL_DIR/wg-manager.sh"
-        chmod +x "$INSTALL_DIR/wg-manager.py"
-        chmod +x "$INSTALL_DIR/wg-manager"
-        
-        echo -e "${GREEN}WireGuard Manager успешно обновлен.${NC}"
-    else
-        echo -e "${RED}Файлы не найдены после скачивания!${NC}"
-        rm -rf "$TMP_DIR"
-        exit 1
-    fi
-    
-    # Удаляем временную директорию
-    rm -rf "$TMP_DIR"
-}
-
-# Показываем информацию о программе
+# ===== Информация =====
 show_info() {
     echo -e "${BOLD}${BLUE}WireGuard Manager${NC}"
-    echo -e "Интерактивный менеджер для WireGuard VPN\n"
-    
-    # Проверяем наличие установленных файлов
     if [ -f "$INSTALL_DIR/wg-manager.py" ]; then
-        echo -e "${GREEN}✓ WireGuard Manager установлен${NC}"
-        echo -e "   Директория установки: ${BOLD}$INSTALL_DIR${NC}"
-        echo -e "   Команда запуска: ${BOLD}wg-manager${NC}"
+        echo -e "${GREEN}✓ Установлен${NC} в ${BOLD}$INSTALL_DIR${NC}"
     else
-        echo -e "${RED}✗ WireGuard Manager не установлен${NC}"
+        echo -e "${RED}✗ Не установлен${NC}"
     fi
-    
-    # Проверяем зависимости
-    echo -e "\nЗависимости:"
-    if command -v python3 &> /dev/null; then
-        python_version=$(python3 --version 2>&1)
-        echo -e "${GREEN}✓ Python3 установлен ($python_version)${NC}"
-    else
-        echo -e "${RED}✗ Python3 не установлен${NC}"
-    fi
-    
-    if command -v wg &> /dev/null; then
-        wireguard_version=$(wg --version 2>&1 | head -n1)
-        echo -e "${GREEN}✓ WireGuard установлен ($wireguard_version)${NC}"
-    else
-        echo -e "${RED}✗ WireGuard не установлен${NC}"
-    fi
-    
-    echo -e "\n${YELLOW}Для управления WireGuard VPN выполните команду:${NC} ${BOLD}wg-manager${NC}"
+    python3 --version &>/dev/null && echo -e "${GREEN}✓ Python3${NC}" || echo -e "${RED}✗ Python3${NC}"
+    wg --version &>/dev/null && echo -e "${GREEN}✓ WireGuard${NC}" || echo -e "${RED}✗ WireGuard${NC}"
 }
 
-# Главное меню
-show_main_menu() {
+# ===== Меню =====
+menu() {
     clear
-    echo -e "${BOLD}${BLUE}===============================${NC}"
-    echo -e "${BOLD}${BLUE}     WireGuard Manager Tool    ${NC}"
-    echo -e "${BOLD}${BLUE}===============================${NC}\n"
-    
-    echo -e "${BOLD}Выберите действие:${NC}"
-    echo -e "${GREEN}1.${NC} Установить WireGuard Manager"
-    echo -e "${BLUE}2.${NC} Обновить WireGuard Manager"
-    echo -e "${RED}3.${NC} Удалить WireGuard Manager"
-    echo -e "${YELLOW}4.${NC} Информация"
-    echo -e "${RED}0.${NC} Выход\n"
-
-    # Простой способ получения ввода с ограничением времени
-    echo -e "Введите номер (1-4, 0) и нажмите Enter: "
-    option=""
-    read -r option
-
-    # Простая обработка ввода без цикла
-    case $option in
-        1)
-            echo -e "${GREEN}Запуск установки...${NC}"
-            check_dependencies && download_wg_manager && install_wg_manager
-            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
-            show_main_menu
-            ;;
-        2)
-            echo -e "${BLUE}Запуск обновления...${NC}"
-            update_wg_manager
-            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
-            show_main_menu
-            ;;
-        3)
-            echo -e "${RED}Запуск удаления...${NC}"
-            uninstall_wg_manager
-            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
-            show_main_menu
-            ;;
-        4)
-            show_info
-            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
-            show_main_menu
-            ;;
-        0|q|exit)
-            echo -e "${GREEN}Выход из программы.${NC}"
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}Некорректный выбор.${NC}"
-            echo -e "Нажмите любую клавишу, чтобы вернуться в меню или Ctrl+C для выхода."
-            read -n 1 -s
-            show_main_menu
-            ;;
+    echo -e "${BOLD}${BLUE}WireGuard Manager Installer${NC}"
+    echo -e "1) Установить\n2) Обновить\n3) Удалить\n4) Инфо\n0) Выход"
+    read -p "Выбор: " opt
+    case "$opt" in
+        1) check_dependencies; download_files; install_manager ;;
+        2) update_manager ;;
+        3) uninstall_manager ;;
+        4) show_info ;;
+        0) exit 0 ;;
+        *) echo -e "${RED}Неверный выбор${NC}" ;;
     esac
+    read -n1 -s -r -p "Нажмите любую клавишу..."
+    menu
 }
 
-# Запуск с обработкой ошибок
-main() {
-    # Перехват сигнала прерывания (Ctrl+C)
-    trap 'echo -e "\n${RED}Прервано пользователем.${NC}"; exit 1' INT
-    
-    # Проверка прав
-    check_root
-    
-    # Запуск меню
-    show_main_menu
-}
-
-# Запуск главной функции с блокировкой повторного запуска
-if [ -f "/tmp/wg_manager_installer.lock" ]; then
-    pid=$(cat "/tmp/wg_manager_installer.lock")
-    if ps -p $pid > /dev/null 2>&1; then
-        echo -e "${RED}Установщик WireGuard Manager уже запущен (PID: $pid).${NC}"
-        echo -e "Если это ошибка, удалите файл блокировки: ${BOLD}sudo rm /tmp/wg_manager_installer.lock${NC}"
-        exit 1
-    fi
-fi
-
-# Создание файла блокировки
-echo $$ > "/tmp/wg_manager_installer.lock"
-
-# Очистка при выходе
-trap 'rm -f /tmp/wg_manager_installer.lock' EXIT
-
-# Запуск
-main
+# ===== Запуск =====
+require_root
+menu
