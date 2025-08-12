@@ -26,16 +26,17 @@ FILES=(
 
 # Функция для вывода цветного текста
 print_color() {
-    printf "${1# Показать справку
-show_help() {${2}${NC}\n"
+    printf "${1}${2}${NC}\n"
 }
 
 # Проверка, запущен ли скрипт через pipe
 is_piped() {
     [[ ! -t 0 ]]
 }
+
 # Проверка root прав
 check_root() {
+    if [[ $EUID -ne 0 ]]; then
         print_color $RED "Ошибка: Этот скрипт должен запускаться с правами root"
         print_color $YELLOW "Используйте: sudo $0"
         exit 1
@@ -181,6 +182,22 @@ download_file() {
     fi
 }
 
+# Функция для получения пользовательского ввода
+get_user_input() {
+    local prompt="$1"
+    local response
+    
+    if is_piped; then
+        echo -n "$prompt"
+        read -r response </dev/tty
+    else
+        echo -n "$prompt"
+        read -r response
+    fi
+    
+    echo "$response"
+}
+
 # Установка WireGuard Manager
 install_wg_manager() {
     check_root
@@ -218,7 +235,7 @@ update_wg_manager() {
     
     if [[ ! -d "$WG_MANAGER_DIR" ]]; then
         print_color $RED "Ошибка: WireGuard Manager не установлен"
-        print_color $YELLOW "Используйте опцию установки: $0 install"
+        print_color $YELLOW "Используйте опцию установки"
         exit 1
     fi
     
@@ -357,23 +374,6 @@ show_menu() {
     echo ""
 }
 
-# Функция для получения пользовательского ввода
-get_user_input() {
-    local prompt="$1"
-    local response
-    
-    if is_piped; then
-        # При запуске через pipe перенаправляем ввод с терминала
-        echo -n "$prompt"
-        read -r response </dev/tty
-    else
-        echo -n "$prompt"
-        read -r response
-    fi
-    
-    echo "$response"
-}
-
 # Интерактивный режим
 interactive_mode() {
     local choice
@@ -418,6 +418,9 @@ interactive_mode() {
         esac
     done
 }
+
+# Показать справку
+show_help() {
     echo "WireGuard Manager Installer"
     echo "Использование: $0 [ДЕЙСТВИЕ]"
     echo ""
@@ -481,4 +484,3 @@ main() {
 
 # Запуск скрипта
 main "$@"
-}
