@@ -63,24 +63,26 @@ download_wg_manager() {
     # Создаем временную директорию
     TMP_DIR=$(mktemp -d)
     
-    # Пытаемся клонировать репозиторий
-    if git clone "$REPO_URL" "$TMP_DIR" &> /dev/null; then
-        echo -e "${GREEN}WireGuard Manager успешно скачан.${NC}"
-    else
-        echo -e "${YELLOW}Не удалось скачать из репозитория. Попробуем использовать локальную копию...${NC}"
-        
-        # Проверяем текущую директорию на наличие необходимых файлов
-        if [ -f "wg-manager.py" ]; then
-            cp wg-manager.py "$TMP_DIR/"
-            echo -e "${GREEN}Найдена локальная копия wg-manager.py${NC}"
-        else
-            echo -e "${RED}Файл wg-manager.py не найден ни в репозитории, ни в локальной директории!${NC}"
-            rm -rf "$TMP_DIR"
-            exit 1
-        fi
-    fi
+    # Скачиваем файлы напрямую
+    wget -q -O "$TMP_DIR/wg-manager.sh" "https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.sh" || {
+        echo -e "${RED}Не удалось скачать wg-manager.sh. Проверьте соединение и URL.${NC}"
+        rm -rf "$TMP_DIR"
+        exit 1
+    }
     
-    echo -e "${GREEN}Файлы WireGuard Manager готовы к установке.${NC}"
+    wget -q -O "$TMP_DIR/wg-manager.py" "https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.py" || {
+        echo -e "${RED}Не удалось скачать wg-manager.py. Проверьте соединение и URL.${NC}"
+        rm -rf "$TMP_DIR"
+        exit 1
+    }
+
+    wget -q -O "$TMP_DIR/wg-manager" "https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager" || {
+        echo -e "${RED}Не удалось скачать wg-manager. Проверьте соединение и URL.${NC}"
+        rm -rf "$TMP_DIR"
+        exit 1
+    }
+    
+    echo -e "${GREEN}Файлы WireGuard Manager успешно скачаны.${NC}"
     return 0
 }
 
