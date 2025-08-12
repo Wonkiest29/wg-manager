@@ -8,8 +8,10 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Репозиторий GitHub (замените на свой репозиторий)
-REPO_URL="https://github.com/username/wg-manager.git"
+# Файлы для загрузки
+WG_MANAGER_SH="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.sh"
+WG_MANAGER_PY="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.py"
+WG_MANAGER="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager"
 INSTALL_DIR="/opt/wg-manager"
 BIN_LINK="/usr/local/bin/wg-manager"
 
@@ -63,20 +65,38 @@ download_wg_manager() {
     # Создаем временную директорию
     TMP_DIR=$(mktemp -d)
     
+    echo -e "Загрузка файлов..."
+    
+    # Проверяем наличие wget или curl
+    if command -v wget &> /dev/null; then
+        DOWNLOAD_CMD="wget -q -O"
+    elif command -v curl &> /dev/null; then
+        DOWNLOAD_CMD="curl -s -o"
+    else
+        echo -e "${RED}Не найдено инструментов для скачивания (wget или curl)!${NC}"
+        echo -e "${YELLOW}Пытаюсь установить wget...${NC}"
+        apt-get update && apt-get install -y wget || {
+            echo -e "${RED}Не удалось установить wget. Проверьте соединение и права доступа.${NC}"
+            rm -rf "$TMP_DIR"
+            exit 1
+        }
+        DOWNLOAD_CMD="wget -q -O"
+    fi
+    
     # Скачиваем файлы напрямую
-    wget -q -O "$TMP_DIR/wg-manager.sh" "https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.sh" || {
+    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.sh" "$WG_MANAGER_SH" || {
         echo -e "${RED}Не удалось скачать wg-manager.sh. Проверьте соединение и URL.${NC}"
         rm -rf "$TMP_DIR"
         exit 1
     }
     
-    wget -q -O "$TMP_DIR/wg-manager.py" "https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager.py" || {
+    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.py" "$WG_MANAGER_PY" || {
         echo -e "${RED}Не удалось скачать wg-manager.py. Проверьте соединение и URL.${NC}"
         rm -rf "$TMP_DIR"
         exit 1
     }
 
-    wget -q -O "$TMP_DIR/wg-manager" "https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main/wg-manager" || {
+    $DOWNLOAD_CMD "$TMP_DIR/wg-manager" "$WG_MANAGER" || {
         echo -e "${RED}Не удалось скачать wg-manager. Проверьте соединение и URL.${NC}"
         rm -rf "$TMP_DIR"
         exit 1
@@ -93,36 +113,43 @@ install_wg_manager() {
     # Создаем директорию для установки
     mkdir -p "$INSTALL_DIR"
     
-    # Копируем файлы из временной директории или текущей директории
-    if [ -d "$TMP_DIR" ] && [ -f "$TMP_DIR/wg-manager.py" ]; then
-        cp "$TMP_DIR/wg-manager.py" "$INSTALL_DIR/"
+    # Копируем файлы из временной директории
+    if [ -d "$TMP_DIR" ]; then
+        if [ -f "$TMP_DIR/wg-manager.py" ]; then
+            cp "$TMP_DIR/wg-manager.py" "$INSTALL_DIR/"
+            echo -e "${GREEN}✓${NC} Установлен скрипт wg-manager.py"
+        else
+            echo -e "${RED}✗${NC} Файл wg-manager.py не найден!"
+            exit 1
+        fi
+        
+        if [ -f "$TMP_DIR/wg-manager.sh" ]; then
+            cp "$TMP_DIR/wg-manager.sh" "$INSTALL_DIR/"
+            echo -e "${GREEN}✓${NC} Установлен скрипт wg-manager.sh"
+        fi
+        
+        if [ -f "$TMP_DIR/wg-manager" ]; then
+            cp "$TMP_DIR/wg-manager" "$INSTALL_DIR/"
+            echo -e "${GREEN}✓${NC} Установлен скрипт wg-manager"
+        fi
     else
-        cp "wg-manager.py" "$INSTALL_DIR/"
+        echo -e "${RED}Ошибка: Временная директория не найдена${NC}"
+        exit 1
     fi
-    
-    # Создаем скрипт-обертку для запуска
-    cat > "$INSTALL_DIR/wg-manager.sh" << 'EOF'
-#!/bin/bash
-
-# Находим путь к скрипту
-SCRIPT_DIR="/opt/wg-manager"
-
-# Проверка существования основного скрипта
-if [ ! -f "$SCRIPT_DIR/wg-manager.py" ]; then
-    echo "Ошибка: Файл wg-manager.py не найден в $SCRIPT_DIR"
-    exit 1
-fi
-
-# Запуск скрипта с передачей всех аргументов
-python3 "$SCRIPT_DIR/wg-manager.py" "$@"
-EOF
     
     # Делаем скрипты исполняемыми
     chmod +x "$INSTALL_DIR/wg-manager.py"
     chmod +x "$INSTALL_DIR/wg-manager.sh"
+    if [ -f "$INSTALL_DIR/wg-manager" ]; then
+        chmod +x "$INSTALL_DIR/wg-manager"
+    fi
     
     # Создаем символическую ссылку
-    ln -sf "$INSTALL_DIR/wg-manager.sh" "$BIN_LINK"
+    if [ -f "$INSTALL_DIR/wg-manager" ]; then
+        ln -sf "$INSTALL_DIR/wg-manager" "$BIN_LINK"
+    else
+        ln -sf "$INSTALL_DIR/wg-manager.sh" "$BIN_LINK"
+    fi
     
     # Создаем директорию для ключей, если её нет
     mkdir -p "$INSTALL_DIR/keys"
@@ -173,20 +200,47 @@ update_wg_manager() {
     # Создаем временную директорию
     TMP_DIR=$(mktemp -d)
     
-    # Пытаемся клонировать репозиторий
-    if git clone "$REPO_URL" "$TMP_DIR" &> /dev/null; then
-        # Проверяем, что скачанный файл действительно существует
-        if [ -f "$TMP_DIR/wg-manager.py" ]; then
-            # Копируем новую версию скрипта
-            cp "$TMP_DIR/wg-manager.py" "$INSTALL_DIR/"
-            echo -e "${GREEN}WireGuard Manager успешно обновлен.${NC}"
-        else
-            echo -e "${RED}Файл wg-manager.py не найден в репозитории!${NC}"
+    # Проверяем наличие wget или curl
+    if command -v wget &> /dev/null; then
+        DOWNLOAD_CMD="wget -q -O"
+    elif command -v curl &> /dev/null; then
+        DOWNLOAD_CMD="curl -s -o"
+    else
+        echo -e "${RED}Не найдено инструментов для скачивания (wget или curl)!${NC}"
+        echo -e "${YELLOW}Пытаюсь установить wget...${NC}"
+        apt-get update && apt-get install -y wget || {
+            echo -e "${RED}Не удалось установить wget. Проверьте соединение и права доступа.${NC}"
             rm -rf "$TMP_DIR"
             exit 1
-        fi
+        }
+        DOWNLOAD_CMD="wget -q -O"
+    fi
+    
+    # Скачиваем файлы напрямую
+    echo -e "Скачивание последних версий файлов..."
+    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.sh" "$WG_MANAGER_SH" && \
+    $DOWNLOAD_CMD "$TMP_DIR/wg-manager.py" "$WG_MANAGER_PY" && \
+    $DOWNLOAD_CMD "$TMP_DIR/wg-manager" "$WG_MANAGER" || {
+        echo -e "${RED}Ошибка при скачивании файлов. Проверьте соединение.${NC}"
+        rm -rf "$TMP_DIR"
+        exit 1
+    }
+    
+    # Проверяем, что скачанные файлы существуют
+    if [ -f "$TMP_DIR/wg-manager.py" ] && [ -f "$TMP_DIR/wg-manager.sh" ]; then
+        # Копируем новые версии файлов
+        cp "$TMP_DIR/wg-manager.py" "$INSTALL_DIR/"
+        cp "$TMP_DIR/wg-manager.sh" "$INSTALL_DIR/"
+        cp "$TMP_DIR/wg-manager" "$INSTALL_DIR/"
+        
+        # Делаем скрипты исполняемыми
+        chmod +x "$INSTALL_DIR/wg-manager.sh"
+        chmod +x "$INSTALL_DIR/wg-manager.py"
+        chmod +x "$INSTALL_DIR/wg-manager"
+        
+        echo -e "${GREEN}WireGuard Manager успешно обновлен.${NC}"
     else
-        echo -e "${RED}Не удалось скачать обновление. Проверьте соединение или URL репозитория.${NC}"
+        echo -e "${RED}Файлы не найдены после скачивания!${NC}"
         rm -rf "$TMP_DIR"
         exit 1
     fi
@@ -242,30 +296,76 @@ show_main_menu() {
     echo -e "${YELLOW}4.${NC} Информация"
     echo -e "${RED}0.${NC} Выход\n"
 
-    local attempts=0
-    local max_attempts=3
+    # Простой способ получения ввода с ограничением времени
+    echo -e "Введите номер (1-4, 0) и нажмите Enter: "
+    option=""
+    read -r option
 
-    while [ $attempts -lt $max_attempts ]; do
-        read -p "Ваш выбор: " option
-        case $option in
-            1) check_dependencies && download_wg_manager && install_wg_manager; return ;;
-            2) update_wg_manager; return ;;
-            3) uninstall_wg_manager; return ;;
-            4) show_info; return ;;
-            0) echo -e "${GREEN}Выход из программы.${NC}"; exit 0 ;;
-            *) echo -e "${RED}Некорректный выбор. Повторите попытку.${NC}"; attempts=$((attempts + 1)) ;;
-        esac
-    done
-
-    echo -e "${RED}Превышено количество попыток. Завершение программы.${NC}"
-    exit 1
+    # Простая обработка ввода без цикла
+    case $option in
+        1)
+            echo -e "${GREEN}Запуск установки...${NC}"
+            check_dependencies && download_wg_manager && install_wg_manager
+            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
+            show_main_menu
+            ;;
+        2)
+            echo -e "${BLUE}Запуск обновления...${NC}"
+            update_wg_manager
+            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
+            show_main_menu
+            ;;
+        3)
+            echo -e "${RED}Запуск удаления...${NC}"
+            uninstall_wg_manager
+            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
+            show_main_menu
+            ;;
+        4)
+            show_info
+            read -n 1 -s -r -p "Нажмите любую клавишу для продолжения..."
+            show_main_menu
+            ;;
+        0|q|exit)
+            echo -e "${GREEN}Выход из программы.${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Некорректный выбор.${NC}"
+            echo -e "Нажмите любую клавишу, чтобы вернуться в меню или Ctrl+C для выхода."
+            read -n 1 -s
+            show_main_menu
+            ;;
+    esac
 }
 
-# Главная функция
+# Запуск с обработкой ошибок
 main() {
+    # Перехват сигнала прерывания (Ctrl+C)
+    trap 'echo -e "\n${RED}Прервано пользователем.${NC}"; exit 1' INT
+    
+    # Проверка прав
     check_root
+    
+    # Запуск меню
     show_main_menu
 }
 
-# Запуск главной функции
+# Запуск главной функции с блокировкой повторного запуска
+if [ -f "/tmp/wg_manager_installer.lock" ]; then
+    pid=$(cat "/tmp/wg_manager_installer.lock")
+    if ps -p $pid > /dev/null 2>&1; then
+        echo -e "${RED}Установщик WireGuard Manager уже запущен (PID: $pid).${NC}"
+        echo -e "Если это ошибка, удалите файл блокировки: ${BOLD}sudo rm /tmp/wg_manager_installer.lock${NC}"
+        exit 1
+    fi
+fi
+
+# Создание файла блокировки
+echo $$ > "/tmp/wg_manager_installer.lock"
+
+# Очистка при выходе
+trap 'rm -f /tmp/wg_manager_installer.lock' EXIT
+
+# Запуск
 main
