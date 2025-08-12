@@ -26,12 +26,16 @@ FILES=(
 
 # Функция для вывода цветного текста
 print_color() {
-    printf "${1}${2}${NC}\n"
+    printf "${1# Показать справку
+show_help() {${2}${NC}\n"
 }
 
+# Проверка, запущен ли скрипт через pipe
+is_piped() {
+    [[ ! -t 0 ]]
+}
 # Проверка root прав
 check_root() {
-    if [[ $EUID -ne 0 ]]; then
         print_color $RED "Ошибка: Этот скрипт должен запускаться с правами root"
         print_color $YELLOW "Используйте: sudo $0"
         exit 1
@@ -263,8 +267,8 @@ remove_wg_manager() {
     if [[ -d "$WG_MANAGER_DIR" ]]; then
         print_color $RED "ВНИМАНИЕ: Это удалит ВСЕ конфигурации и ключи WireGuard!"
         print_color $YELLOW "Директория: $WG_MANAGER_DIR"
-        echo -n "Вы уверены, что хотите продолжить? [y/N]: "
-        read -r response
+        
+        local response=$(get_user_input "Вы уверены, что хотите продолжить? [y/N]: ")
         
         case $response in
             [yY]|[yY][eE][sS])
@@ -328,27 +332,126 @@ show_info() {
     print_color $BLUE "  Пакетный менеджер: $(detect_package_manager)"
 }
 
-# Показать справку
-show_help() {
+# Интерактивное меню выбора действия
+show_menu() {
+    clear
+    print_color $BLUE "=================================="
+    print_color $BLUE "   WireGuard Manager Installer"
+    print_color $BLUE "=================================="
+    echo ""
+    
+    # Проверка статуса установки
+    if [[ -d "$WG_MANAGER_DIR" ]] && [[ -L "$WG_MANAGER_BIN" ]]; then
+        print_color $GREEN "Статус: WireGuard Manager установлен"
+    else
+        print_color $YELLOW "Статус: WireGuard Manager не установлен"
+    fi
+    
+    echo ""
+    print_color $YELLOW "Выберите действие:"
+    echo "1) Установить WireGuard Manager"
+    echo "2) Обновить WireGuard Manager"
+    echo "3) Удалить WireGuard Manager"
+    echo "4) Показать информацию"
+    echo "5) Выход"
+    echo ""
+}
+
+# Функция для получения пользовательского ввода
+get_user_input() {
+    local prompt="$1"
+    local response
+    
+    if is_piped; then
+        # При запуске через pipe перенаправляем ввод с терминала
+        echo -n "$prompt"
+        read -r response </dev/tty
+    else
+        echo -n "$prompt"
+        read -r response
+    fi
+    
+    echo "$response"
+}
+
+# Интерактивный режим
+interactive_mode() {
+    local choice
+    
+    while true; do
+        show_menu
+        choice=$(get_user_input "Введите номер (1-5): ")
+        
+        case $choice in
+            1)
+                echo ""
+                install_wg_manager
+                echo ""
+                get_user_input "Нажмите Enter для продолжения..."
+                ;;
+            2)
+                echo ""
+                update_wg_manager
+                echo ""
+                get_user_input "Нажмите Enter для продолжения..."
+                ;;
+            3)
+                echo ""
+                remove_wg_manager
+                echo ""
+                get_user_input "Нажмите Enter для продолжения..."
+                ;;
+            4)
+                echo ""
+                show_info
+                echo ""
+                get_user_input "Нажмите Enter для продолжения..."
+                ;;
+            5)
+                print_color $GREEN "До свидания!"
+                exit 0
+                ;;
+            *)
+                print_color $RED "Неверный выбор. Пожалуйста, введите число от 1 до 5."
+                sleep 2
+                ;;
+        esac
+    done
+}
     echo "WireGuard Manager Installer"
     echo "Использование: $0 [ДЕЙСТВИЕ]"
     echo ""
     echo "Действия:"
-    echo "  install    Установить WireGuard Manager"
-    echo "  update     Обновить WireGuard Manager"
-    echo "  remove     Удалить WireGuard Manager"
-    echo "  info       Показать информацию об установке"
-    echo "  help       Показать эту справку"
+    echo "  install       Установить WireGuard Manager"
+    echo "  update        Обновить WireGuard Manager"
+    echo "  remove        Удалить WireGuard Manager"
+    echo "  info          Показать информацию об установке"
+    echo "  menu          Запустить интерактивное меню"
+    echo "  help          Показать эту справку"
+    echo ""
+    echo "Если запустить без параметров, откроется интерактивное меню."
     echo ""
     echo "Примеры:"
-    echo "  $0 install"
-    echo "  $0 update"
-    echo "  $0 remove"
-    echo "  $0 info"
+    echo "  $0                    # Интерактивное меню"
+    echo "  $0 install            # Прямая установка"
+    echo "  $0 update             # Прямое обновление"
+    echo "  $0 remove             # Прямое удаление"
+    echo "  $0 info               # Показать информацию"
+    echo ""
+    echo "Запуск через curl:"
+    echo "  curl -s URL | bash                    # Интерактивное меню"
+    echo "  curl -s URL | bash -s install         # Прямая установка"
+    echo "  curl -s URL | bash -s info            # Показать информацию"
 }
 
 # Основная логика
 main() {
+    # Если скрипт запущен без параметров, запускаем интерактивное меню
+    if [[ $# -eq 0 ]]; then
+        interactive_mode
+        return
+    fi
+    
     case "${1:-}" in
         "install")
             install_wg_manager
@@ -362,13 +465,11 @@ main() {
         "info"|"status")
             show_info
             ;;
+        "menu"|"interactive")
+            interactive_mode
+            ;;
         "help"|"-h"|"--help")
             show_help
-            ;;
-        "")
-            print_color $YELLOW "Не указано действие"
-            show_help
-            exit 1
             ;;
         *)
             print_color $RED "Неизвестное действие: $1"
