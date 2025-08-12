@@ -241,20 +241,24 @@ show_main_menu() {
     echo -e "${RED}3.${NC} Удалить WireGuard Manager"
     echo -e "${YELLOW}4.${NC} Информация"
     echo -e "${RED}0.${NC} Выход\n"
-    
-    read -p "Ваш выбор: " option
-    
-    case $option in
-        1) check_dependencies && download_wg_manager && install_wg_manager ;;
-        2) update_wg_manager ;;
-        3) uninstall_wg_manager ;;
-        4) show_info ;;
-        0) echo -e "${GREEN}Выход из программы.${NC}"; exit 0 ;;
-        *) echo -e "${RED}Некорректный выбор. Повторите попытку.${NC}"; sleep 2; show_main_menu ;;
-    esac
-    
-    read -p "Нажмите Enter для возврата в главное меню..."
-    show_main_menu
+
+    local attempts=0
+    local max_attempts=3
+
+    while [ $attempts -lt $max_attempts ]; do
+        read -p "Ваш выбор: " option
+        case $option in
+            1) check_dependencies && download_wg_manager && install_wg_manager; return ;;
+            2) update_wg_manager; return ;;
+            3) uninstall_wg_manager; return ;;
+            4) show_info; return ;;
+            0) echo -e "${GREEN}Выход из программы.${NC}"; exit 0 ;;
+            *) echo -e "${RED}Некорректный выбор. Повторите попытку.${NC}"; attempts=$((attempts + 1)) ;;
+        esac
+    done
+
+    echo -e "${RED}Превышено количество попыток. Завершение программы.${NC}"
+    exit 1
 }
 
 # Главная функция
