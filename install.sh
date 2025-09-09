@@ -218,16 +218,25 @@ install_wg_manager() {
     print_color $BLUE "Создание символьной ссылки..."
     ln -sf "${WG_MANAGER_DIR}/wg-manager" "$WG_MANAGER_BIN"
     
-    # Запрос интерфейса и подсети
+    # Интерактивный выбор параметров
     local wg_interface
     local wg_subnet
+    local wg_endpoint
+
+    print_color $YELLOW "\n--- Настройка параметров WireGuard ---"
     wg_interface=$(get_user_input "Введите имя интерфейса WireGuard (например, wg0): ")
     if [[ -z "$wg_interface" ]]; then
         wg_interface="wg0"
     fi
+
     wg_subnet=$(get_user_input "Введите подсеть для клиентов (например, 10.8.0.): ")
     if [[ -z "$wg_subnet" ]]; then
         wg_subnet="10.8.0."
+    fi
+
+    wg_endpoint=$(get_user_input "Введите внешний эндпоинт сервера (IP:PORT, например, 92.113.151.201:51820): ")
+    if [[ -z "$wg_endpoint" ]]; then
+        wg_endpoint="yourip:51820"
     fi
 
     # Создание settings.toml
@@ -235,7 +244,7 @@ install_wg_manager() {
 CONF = "/etc/wireguard/${wg_interface}.conf"
 SUBNET = "${wg_subnet}"
 KEYS_DIR = "./keys"
-ENDPOINT = "92.113.151.201:51820"
+ENDPOINT = "${wg_endpoint}"
 EOF
     
     print_color $GREEN "WireGuard Manager успешно установлен!"
