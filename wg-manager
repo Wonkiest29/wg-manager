@@ -4,4 +4,4 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Запускаем Python-скрипт с полным путем
-python3 "$SCRIPT_DIR/wg-manager.py" "$@"
+python3 "$SCRIPT_DIR/wg-manager" "$@"
