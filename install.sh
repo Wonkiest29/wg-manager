@@ -186,15 +186,8 @@ download_file() {
 get_user_input() {
     local prompt="$1"
     local response
-    
-    if is_piped; then
-        echo -n "$prompt"
-        read -r response </dev/tty
-    else
-        echo -n "$prompt"
-        read -r response
-    fi
-    
+    echo -n "$prompt"
+    read -r response
     echo "$response"
 }
 
@@ -380,34 +373,39 @@ interactive_mode() {
     
     while true; do
         show_menu
-        choice=$(get_user_input "Введите номер (1-5): ")
+        echo -n "Введите номер (1-5): "
+        read -r choice
         
-        case $choice in
-            1)
+        case "$choice" in
+            "1")
                 echo ""
                 install_wg_manager
                 echo ""
-                get_user_input "Нажмите Enter для продолжения..."
+                echo -n "Нажмите Enter для продолжения..."
+                read -r
                 ;;
-            2)
+            "2")
                 echo ""
                 update_wg_manager
                 echo ""
-                get_user_input "Нажмите Enter для продолжения..."
+                echo -n "Нажмите Enter для продолжения..."
+                read -r
                 ;;
-            3)
+            "3")
                 echo ""
                 remove_wg_manager
                 echo ""
-                get_user_input "Нажмите Enter для продолжения..."
+                echo -n "Нажмите Enter для продолжения..."
+                read -r
                 ;;
-            4)
+            "4")
                 echo ""
                 show_info
                 echo ""
-                get_user_input "Нажмите Enter для продолжения..."
+                echo -n "Нажмите Enter для продолжения..."
+                read -r
                 ;;
-            5)
+            "5")
                 print_color $GREEN "До свидания!"
                 exit 0
                 ;;
