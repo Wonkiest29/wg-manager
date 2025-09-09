@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Константы
 WG_MANAGER_DIR="/opt/wg-manager"
-WG_MANAGER_BIN="/opt/wg-manager"
+WG_MANAGER_BIN="/usr/local/bin/wg-manager"
 GITHUB_BASE_URL="https://raw.githubusercontent.com/Wonkiest29/wg-privatenet/refs/heads/main"
 
 # URL файлов
