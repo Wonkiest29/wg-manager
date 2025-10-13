@@ -1,3 +1,6 @@
+> [!NOTE]  
+> Best way use [WGDashboard](https://github.com/WGDashboard/WGDashboard)
+
 # WireGuard Manager
 
 Интерактивный менеджер для управления WireGuard VPN.
